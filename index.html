@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Document</title>
+    <style type="text/css">
+    body {
+        text-align: center;
+        background-color: #000;
+    }
+
+    #c1 {
+        width: 800px;
+        height: 600px;
+        background: url(img/game_bg_2_hd.jpg) no-repeat;
+        margin: 0 auto;
+    }
+    </style>
+    <script type="text/javascript" src="js/common.js"></script>
+    <script type="text/javascript" src="js/drawRect.js"></script>
+    <script type="text/javascript" src="js/sprite.js"></script>
+    <script type="text/javascript" src="js/fish.js"></script>
+    <script type="text/javascript" src="js/cannon.js"></script>
+    <script type="text/javascript" src="js/button.js"></script>
+    <script type="text/javascript" src="js/bullet.js"></script>
+    <script type="text/javascript" src="js/coin.js"></script>
+    <script>
+    window.onload = function() {
+        let oC = document.getElementById('c1');
+        let gd = oC.getContext('2d');
+
+        let lastFire=0;
+        let fired=false;
+        let MAX_FISH=30;
+        const coinCollector={x:106,y:576};
+        let playerScore=1000;
+
+        const W = oC.width,
+            H = oC.height;
+
+        loadImages(_resources, function() {
+            //炮台
+            let tower = new Sprite(new DrawRect(_imgs.bottom, 0, 0, 756, 71, ));
+            tower.x = 400;
+            tower.y = H - 71 / 2 + 1;
+
+            //炮
+            let cannon = new Cannon(1);
+
+            cannon.x = 443;
+            cannon.y = 574;
+
+            //炮弹
+            let bullets=[];
+
+            //鱼
+            let fishs=[];
+
+            // 金币
+            let coins=[];
+
+            //分数数字
+            let scores=[];
+
+            for(let i=0;i<6;i++){
+                let sprite=new Sprite(new DrawRect(_imgs.number,0,9*24,20,24));
+                sprite.x=51+23*i;
+                sprite.y=586;
+                scores.push(sprite);
+            };
+
+            //鼠标事件
+            oC.onmousemove = ev => {
+                let a = ev.offsetX - cannon.x;
+                let b = ev.offsetY - cannon.y;
+                let ang = a2d(Math.atan2(b, a)) + 90;
+                cannon.rotation = ang;
+            }
+
+            //加号、减号
+            let btnMinus = new Button(
+                new DrawRect(_imgs.bottom, 135, 75, 36, 28),
+                new DrawRect(_imgs.bottom, 91, 75, 36, 28)
+            );
+            btnMinus.x = 371;
+            btnMinus.y = 566;
+
+            let btnPlus = new Button(
+                new DrawRect(_imgs.bottom, 47, 75, 36, 28),
+                new DrawRect(_imgs.bottom, 3, 75, 36, 28)
+            );
+            btnPlus.x = 516;
+            btnPlus.y = 566;
+
+            btnMinus.onclick = function() {
+                if (cannon.type > 1) {
+                    cannon.setType(cannon.type - 1);
+                } else {
+                    cannon.setType(1);
+                }
+            };
+            btnPlus.onclick = function() {
+                if (cannon.type < 7) {
+                    cannon.setType(cannon.type + 1);
+                } else {
+                    cannon.setType(7);
+                }
+            };
+
+            let aBtn = [btnMinus, btnPlus];
+
+            oC.onmousedown = function(ev) {
+                //检测按钮
+                aBtn.forEach(btn => {
+                    btn.down(ev.offsetX, ev.offsetY);
+                });
+
+                if(Date.now()-lastFire >= 300) {
+                    lastFire=Date.now();
+                    //炮弹
+                    let bullet=new Bullet(cannon.type, cannon.x,cannon.y,cannon.rotation);
+                    bullets.push(bullet);
+
+                    playerScore-=cannon.type*2;
+
+                    fired=true;
+                }
+                
+            };
+            oC.onmouseup = function(ev) {
+                aBtn.forEach(btn => {
+                    btn.up(ev.offsetX, ev.offsetY);
+                });
+            };
+
+            function animate() {
+                requestAnimationFrame(animate);
+
+                //生成鱼
+                if(rnd(1,20)==1 && fishs.length<MAX_FISH) {
+                    let fish=new Fish(rnd(1,5));
+                    if(rnd(0,2)==0) {
+                        //左边
+                        fish.x=-100;
+                        fish.rotation=90;
+                    }else {
+                        //右边
+                        fish.x=W+100;
+                        fish.rotation=-90;
+                    }
+                    fish.y=rnd(0,H-100);
+                    fishs.push(fish);
+                }
+
+                gd.clearRect(0, 0, oC.width, oC.height);
+
+                coins=coins.filter(coin=>{
+                    coin.move(coinCollector.x,coinCollector.y);
+                    coin.nextFrame();
+                    coin.draw(gd);
+
+                    if(Math.abs(coin.x-coinCollector.x)<5 && Math.abs(coin.y-coinCollector.y)<5) {
+                        playerScore+=50;
+                        return false;
+                    }else {
+                        return true;
+                    }
+                });
+                tower.draw(gd);
+
+                bullets=bullets.filter(bullet=>{
+                    bullet.move();
+                    bullet.draw(gd);
+                    return !bullet.outRect(-100,-100,W+200,H+200); 
+                });
+                // console.log(bullets.length);
+
+                fishs=fishs.filter(fish=>{
+                    fish.move();
+                    fish.draw(gd); 
+                    fish.nextFrame();
+                    return !fish.outRect(-100,-100,W+200,H+200); 
+                });
+                // console.log(fishs.length);
+
+
+
+                cannon.draw(gd);
+                if(fired) {
+                    ret=cannon.nextFrame();
+                    if(ret) {
+                        fired=false;
+                    }
+                }
+
+                btnMinus.draw(gd);
+                btnPlus.draw(gd);
+
+                //碰撞
+                fishs=fishs.filter(fish=>{
+                    let colled=false;
+                    bullets=bullets.filter(bullet=>{
+                        if(!colled && fish.collTest(bullet)){ 
+                            if(Math.random()<bullet.type*10/(10+(fish.type-1)*20)) {
+                               colled=true;
+                            }
+                            return false; 
+                        }else {
+                            return true;
+                        }
+                    });
+                    
+                    if(colled) {
+                        fish.isdead=true;
+                        fish.speed=0;
+
+                        setTimeout(function() {
+                            //金币
+                            let a=fish.x-coinCollector.x;
+                            let b=coinCollector.y-fish.y;
+
+                            let i=0;
+                            let timer=setInterval(function(){
+                                let coin=new Coin(1,fish.x,fish.y);
+                                // coin.x+=rnd(-50,50);
+                                // coin.y+=rnd(-50,50);
+                                coins.push(coin);
+                                i++;
+
+                                if(i==Math.pow(2,fish.type)) {
+                                    clearInterval(timer);
+                                }
+                            },60);
+                            
+                            fishs=fishs.filter(item=>item!=fish);
+                        },500);
+
+                        return true;
+                    }else {
+                        return true;
+                    }
+                });
+
+                //分数
+                let str=playerScore+'';
+                while(str.length<6) {
+                   str='0'+str; 
+                }
+                scores.forEach((score,index)=>{
+                    playerScore
+                    score.setDrawRect(new DrawRect(_imgs.number,0,(9-parseInt(str[index]))*24,20,24));
+                    score.draw(gd);
+                });
+            }
+            requestAnimationFrame(animate);
+
+        });
+    }
+    </script>
+</head>
+<body>
+    <canvas id="c1" width="800" height="600"></canvas>
+</body>
+</html>
